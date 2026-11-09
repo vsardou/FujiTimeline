@@ -43,9 +43,12 @@ os caminhos das mídias. Os arquivos gerados ficam em `output/`, ignorada pelo G
 
 CLI e interface desktop implementadas, com leitores de metadados, faixas
 independentes, dois modos de duração e exportador baseado em OpenTimelineIO.
-**68 testes aprovados no Windows.** A interface permite escolher arquivos,
+**74 testes aprovados no Windows.** A interface permite escolher arquivos,
 filtrar a lista de vídeos, analisar horários, informar correção manual e salvar perfis.
-Abra `sincronizador-fotos-videos/Abrir FujiTimeline.bat` após instalar o ambiente.
+Abra o atalho **FujiTimeline** na Área de Trabalho, com ícone verde de câmera.
+O script `sincronizador-fotos-videos/Criar atalho.ps1` cria o atalho sem terminal.
+Busca automática com cache, miniaturas, seleção manual, cancelamento e pastas
+persistidas estão disponíveis; consulte o README do código para detalhes.
 
 O usuário confirmou a importação e religação das mídias reais no Final Cut Pro.
 A GUI também exportou o vídeo e as quatro fotos reais em teste local Windows.

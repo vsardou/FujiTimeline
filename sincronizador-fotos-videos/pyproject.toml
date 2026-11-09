@@ -9,6 +9,7 @@ description = "Metadata-only photo/video synchronization and editable FCPXML exp
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "Pillow>=11,<13",
     "opentimelineio==0.18.1",
     "otio-fcpx-xml-adapter==1.0.0",
     "tzdata>=2025.1",
@@ -25,6 +26,9 @@ fujitimeline-gui = "fujitimeline.gui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+fujitimeline = ["assets/*.ico", "assets/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -1,5 +1,6 @@
 """Desktop workflow, independent of Tk widgets and preserving original media."""
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from collections import OrderedDict
 from fractions import Fraction
 from pathlib import Path
 import os
@@ -12,6 +13,7 @@ from .selection import select_files
 from .timeline import build_timeline
 from .export_fcpxml import export_fcpxml
 from .report import to_json, write_new
+from .jobs import check_cancel
 
 
 def seconds(text: str) -> Fraction:
@@ -64,6 +66,7 @@ class Request:
     timezone: str | None = None
     ffprobe: str = 'ffprobe'
     exiftool: str = 'exiftool'
+    unchecked: frozenset[Path] = frozenset()
 
 
 def execute(request: Request, export: bool = False):
@@ -82,3 +85,71 @@ def execute(request: Request, export: bool = False):
         plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps))
         write_new(report, to_json(plan), '.json')
     return plan
+
+
+@dataclass
+class Review:
+    plan: object
+    candidates: object
+
+
+class Session:
+    """One worker owns the bounded metadata cache. No persistent private metadata."""
+    def __init__(self):
+        self.cache = OrderedDict()
+
+    def run(self, request, export=False, cancel=None, progress=lambda *args: None):
+        check_cancel(cancel)
+        if not 0 <= request.tolerance <= 60:
+            raise ValueError('A tolerância deve estar entre 0 e 60 segundos.')
+        report = request.output.with_suffix('.json')
+        if export and (request.output.suffix.lower() != '.fcpxml' or request.output.exists() or report.exists()):
+            raise ValueError('Escolha um destino .fcpxml novo; XML/JSON existentes não serão sobrescritos.')
+        progress(0, 1, 'Buscando JPEGs na pasta…')
+        inputs = select_files(list(request.videos), request.photos, request.sound, request.recursive, cancel)
+        reader = MetadataReader(request.ffprobe, request.exiftool, request.timezone, cancel)
+        total = len(inputs.videos) + len(inputs.photos) + bool(inputs.sound)
+        count = 0
+        def read(path, kind):
+            nonlocal count
+            check_cancel(cancel)
+            stat = path.stat()
+            key = (path, stat.st_size, stat.st_mtime_ns, kind, request.timezone, request.ffprobe, request.exiftool)
+            if key not in self.cache:
+                self.cache[key] = reader.photos((path,))[0] if kind == 'photo' else getattr(reader, kind)(path)
+            self.cache.move_to_end(key)
+            value = self.cache[key]
+            while len(self.cache) > 10000:
+                self.cache.popitem(last=False)
+            count += 1
+            progress(count, total, f'{count}/{total} • {path.name}')
+            return value
+        videos = [read(p, 'video') for p in inputs.videos]
+        photos = [read(p, 'photo') for p in inputs.photos]
+        sound = read(inputs.sound, 'sound') if inputs.sound else None
+        options = dict(profile=request.profile, tolerance=request.tolerance, mode=request.mode,
+                       fixed_duration=request.fixed, fps=request.fps, sound=sound)
+        check_cancel(cancel)
+        candidates = build_timeline(videos, photos, **options)
+        plan = build_timeline(videos, [p for p in photos if p.path not in request.unchecked], **options)
+        plan.manually_excluded = [p.path for p in photos if p.path in request.unchecked]
+        # Preserve audit data even for manually excluded photos.
+        selected = {p.media.path for p in plan.photos}
+        plan.photo_timings = [replace(t, selected=t.path in selected) for t in candidates.photo_timings]
+        check_cancel(cancel)
+        if export:
+            progress(total, total, 'Gravando XML e relatório…')
+            # Once writing starts, finish both small outputs; cancellation never truncates them.
+            plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps))
+            write_new(report, to_json(plan), '.json')
+        return Review(plan, candidates)
+
+
+def thumbnail(path: Path):
+    """Read a reduced JPEG preview in memory only; never save to source media."""
+    from PIL import Image, ImageOps
+    with Image.open(path) as image:
+        image.draft('RGB', (160, 120))
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail((72, 52))
+        return image.convert('RGB').copy()

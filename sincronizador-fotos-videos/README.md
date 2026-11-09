@@ -198,7 +198,9 @@ correspondências reais conferidas pelo usuário e só cobre a sessão medida.
 
 ## Interface desktop — entrega de 09/11/2026
 
-No Windows, dê dois cliques em **Abrir FujiTimeline.bat**, na pasta do projeto.
+No Windows, use o atalho **FujiTimeline** na Área de Trabalho (ícone verde de câmera).
+Para criá-lo neste checkout, execute `powershell -NoProfile -ExecutionPolicy Bypass -File ".\Criar atalho.ps1"`.
+O atalho chama `pythonw.exe` diretamente, sem terminal. O `.bat` antigo continua disponível.
 Ou execute `.\.venv\Scripts\python.exe -m fujitimeline.gui`.
 No macOS, execute `.venv/bin/python -m fujitimeline.gui`.
 A instalação Python precisa incluir Tkinter/Tk; verifique com `python -m tkinter`
@@ -208,7 +210,7 @@ Após reinstalar o pacote editável, também está disponível `fujitimeline-gui
 1. Adicione um ou mais vídeos pelo seletor nativo. A lista remove duplicatas;
    o filtro pesquisa nome/caminho sem retirar vídeos da seleção. Remover atua
    somente sobre linhas selecionadas. Os seletores reutilizam a última pasta
-   durante a sessão; nenhum histórico de caminhos pessoais é enviado ao Git.
+   entre sessões; somente pastas são salvas localmente, fora do Git. A correção nunca é ativada automaticamente.
 2. Escolha a pasta JPEG; subpastas são opcionais. Ao adicionar vídeos, a pasta
    deles preenche o campo de fotos se estiver vazio. O WAV é opcional.
 3. Informe a correção: `0` (padrão), `-2,202`, `+2.202` ou `-00:02,202`.
@@ -216,11 +218,26 @@ Após reinstalar o pacote editável, também está disponível `fujitimeline-gui
    Para correção não zero, dê um nome ao par câmera/iPhone. Não há modelo presumido.
    Ajustes manuais são experimentais. Salvar/carregar perfis é explícito;
    iniciar uma nova janela sempre começa em zero. Perfis existentes não são sobrescritos.
-4. Use **Analisar e ver horários** para conferir originais, corrigidos, posição
-   exata em segundos e excluídas. A leitura ocorre em segundo plano. Alterações
-   nos campos durante o processamento só valem na próxima execução; a exportação
-   relê as entradas atuais. O filtro de vídeos não altera a lista processada.
-5. Escolha um destino novo e clique **Gerar FCPXML**. O JSON é salvo ao lado,
+4. Ao escolher vídeos/pasta ou mudar offset, tolerância, duração, FPS, WAV ou fuso,
+   a busca recalcula automaticamente após 450 ms sem digitação. **Analisar e ver
+   horários** força uma atualização. Metadados são reutilizados em cache na sessão
+   por caminho/tamanho/mtime/ferramentas/fuso; alterações nos arquivos invalidam o cache.
+   A primeira varredura ainda lê cada JPEG via ExifTool e pode levar mais tempo.
+5. A tabela mostra miniatura, marcação, horário original/corrigido, vídeo associado
+   e posição no vídeo / timeline compacta. Clique na coluna **Usar** ou pressione
+   Espaço para marcar/desmarcar. Há busca por nome/caminho e ações sobre todas as
+   fotos filtradas (incluindo páginas não visíveis). Fotos fora dos períodos não
+   podem ser forçadas para dentro por marcação; ajuste offset/tolerância.
+   O filtro textual só muda a visualização, não a seleção exportada. A opção
+   **Só nos períodos dos vídeos** pode ser desligada para inspecionar as excluídas.
+   Miniaturas são carregadas em segundo plano, 40 fotos por página, sem criar arquivos.
+   Desmarcar fotos recalcula duração e disparos; a escolha é mantida durante a sessão.
+6. Progresso conta arquivos e **Cancelar** interrompe descoberta/leitura, inclusive
+   subprocessos em andamento. Alterações durante uma busca cancelam resultados antigos
+   e agendam uma nova prévia. Uma exportação usa os campos capturados ao clicar;
+   mudanças durante a exportação geram uma prévia seguinte. Se a gravação final já
+   começou, XML e JSON são concluídos antes de fechar. Cancelamento anterior não gera saídas.
+7. Escolha um destino novo e clique **Gerar FCPXML**. O JSON é salvo ao lado,
    com o mesmo nome. XML/JSON existentes não são sobrescritos. Abra a pasta pelo botão.
 
 Opções avançadas permitem indicar executáveis e um fuso apenas se ausente nos
@@ -230,9 +247,23 @@ A interface não reproduz mídias nem valida visualmente um perfil; essa valida�
 continua disponível pela CLI com evidências. Perfis com offsets fracionários sem
 representação decimal exata devem ser usados pela CLI.
 
-Verificação desta entrega: 68 testes automatizados; teste da janela no Windows
+Verificação desta entrega: 74 testes automatizados; teste da janela no Windows
 com 1 MOV e 4 JPEGs reais, filtro da lista e exportação. Correção manual −2,202 s
 posicionou a primeira foto em 10,458 s antes do ajuste à grade de quadros.
 Ainda falta testar seletor nativo e layout no macOS, grandes pastas e diferentes
 escalas de tela. Importação/relink confirmados pelo usuário se referem ao XML
 anterior com offset zero, não ao novo XML corrigido.
+
+Preferências: `%LOCALAPPDATA%/FujiTimeline/folders.json` no Windows;
+`~/Library/Application Support/FujiTimeline/folders.json` no macOS.
+Somente última pasta, pasta JPEG e pasta de saída são persistidas. Metadados,
+miniaturas, offset e seleção de fotos não são persistidos automaticamente.
+O relatório inclui `manually_excluded` e os horários de todas as fotos lidas;
+`selected` indica participação efetiva na exportação, após seleção manual.
+
+Teste completo Windows com mídias reais: busca automática, 4 miniaturas,
+correção −2,202 s, desmarcação de uma foto, duração da primeira recalculada para
+7,170 s e exportação com 3 fotos. Cancelamento de subprocesso e preservação dos
+bytes/mtime de JPEGs têm testes automatizados. O teste real não valida o offset:
+zero importou no Final Cut; antecipação próxima de 2 s foi observada pelo usuário,
+mas o valor exato ainda não foi validado. Sem alteração de mídias e sem Drive.

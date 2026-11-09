@@ -3,19 +3,45 @@
 import json
 import os
 import subprocess
+import time
 from decimal import Decimal
 from fractions import Fraction
 from pathlib import Path
 
 from .models import Photo, Sound, Video
 from .temporal import parse_timestamp
+from .jobs import check_cancel
 
 
-def run_json(command: list[str]):
+def run_json(command: list[str], cancel=None):
     try:
-        completed = subprocess.run(command, check=True, capture_output=True,
+        if cancel is None:
+            completed = subprocess.run(command, check=True, capture_output=True,
                                    encoding="utf-8", errors="replace", timeout=120,
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        else:
+            check_cancel(cancel)
+            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  encoding='utf-8', errors='replace',
+                                  creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0) as process:
+                deadline = time.monotonic() + 120
+                try:
+                    while True:
+                        check_cancel(cancel)
+                        if time.monotonic() >= deadline:
+                            raise subprocess.TimeoutExpired(command, 120)
+                        try:
+                            out, err = process.communicate(timeout=.1)
+                            break
+                        except subprocess.TimeoutExpired:
+                            continue
+                    if process.returncode:
+                        raise subprocess.CalledProcessError(process.returncode, command, out, err)
+                    completed = subprocess.CompletedProcess(command, 0, out, err)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.communicate()
     except FileNotFoundError as exc:
         raise ValueError(f"Ferramenta não encontrada: {command[0]}. Instale-a ou informe seu caminho.") from exc
     except subprocess.TimeoutExpired as exc:
@@ -28,9 +54,9 @@ def run_json(command: list[str]):
         raise ValueError(f"Resposta JSON inválida de {command[0]}.") from exc
 
 
-def probe(path: Path, executable: str = "ffprobe") -> dict:
-    return run_json([executable, "-v", "error", "-show_format", "-show_streams",
-                     "-of", "json", str(path.resolve())])
+def probe(path: Path, executable: str = "ffprobe", cancel=None) -> dict:
+    command = [executable, "-v", "error", "-show_format", "-show_streams", "-of", "json", str(path.resolve())]
+    return run_json(command) if cancel is None else run_json(command, cancel)
 
 
 def _duration(stream: dict, container: dict) -> Fraction:
@@ -120,29 +146,31 @@ def photo_from_exif(path: Path, data: dict, assume_timezone: str | None = None) 
 
 class MetadataReader:
     def __init__(self, ffprobe: str = "ffprobe", exiftool: str = "exiftool",
-                 assume_timezone: str | None = None):
+                 assume_timezone: str | None = None, cancel=None):
         self.ffprobe, self.exiftool = ffprobe, exiftool
         self.assume_timezone = assume_timezone
+        self.cancel = cancel
 
     def video(self, path: Path) -> Video:
-        return video_from_probe(path, probe(path, self.ffprobe), self.assume_timezone)
+        return video_from_probe(path, probe(path, self.ffprobe, self.cancel), self.assume_timezone)
 
     def photos(self, paths: tuple[Path, ...]) -> list[Photo]:
         photos = []
         # One file per subprocess avoids Windows command-line limits and keeps
         # errors attributable. Batch/stay_open is a later performance improvement.
         for path in paths:
-            data = run_json([self.exiftool, "-j", "-G1", "-s", "-n",
+            command = [self.exiftool, "-j", "-G1", "-s", "-n",
                              "-DateTimeOriginal", "-SubSecTimeOriginal", "-OffsetTimeOriginal",
                              "-SubSecDateTimeOriginal", "-ImageWidth", "-ImageHeight",
-                             str(path.resolve())])
+                             str(path.resolve())]
+            data = run_json(command) if self.cancel is None else run_json(command, self.cancel)
             if not isinstance(data, list) or len(data) != 1:
                 raise ValueError(f"Resposta inesperada do ExifTool para {path}.")
             photos.append(photo_from_exif(path, data[0], self.assume_timezone))
         return photos
 
     def sound(self, path: Path) -> Sound:
-        data = probe(path, self.ffprobe)
+        data = probe(path, self.ffprobe, self.cancel)
         container = data.get("format", {})
         if "wav" not in container.get("format_name", "").split(","):
             raise ValueError(f"O arquivo não é um WAV: {path}")

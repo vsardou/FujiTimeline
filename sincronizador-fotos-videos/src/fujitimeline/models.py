@@ -92,6 +92,7 @@ class Timeline:
     sounds: list[SoundPlacement]
     duration: Fraction
     excluded: list[Path] = field(default_factory=list)
+    manually_excluded: list[Path] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     calibration: CalibrationProfile | None = None
     photo_timings: list[PhotoTiming] = field(default_factory=list)

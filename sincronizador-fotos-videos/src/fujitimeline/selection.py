@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
+from .jobs import check_cancel
 
 
 @dataclass(frozen=True)
@@ -17,7 +18,7 @@ def existing_file(path: Path) -> Path:
 
 
 def select_files(videos: list[Path], photo_dir: Path, sound: Path | None = None,
-                 recursive: bool = False) -> Inputs:
+                 recursive: bool = False, cancel=None) -> Inputs:
     if not videos:
         raise ValueError("Selecione pelo menos um vídeo.")
     folder = photo_dir.expanduser().resolve(strict=True)
@@ -25,9 +26,12 @@ def select_files(videos: list[Path], photo_dir: Path, sound: Path | None = None,
         raise ValueError(f"Não é uma pasta: {folder}")
     selected_videos = tuple(dict.fromkeys(existing_file(p) for p in videos))
     files = folder.rglob("*") if recursive else folder.iterdir()
-    photos = tuple(sorted({p.resolve() for p in files
-                           if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg"}},
-                          key=lambda p: str(p).casefold()))
+    found = set()
+    for p in files:
+        check_cancel(cancel)
+        if p.suffix.lower() in {'.jpg', '.jpeg'} and p.is_file():
+            found.add(p.resolve())
+    photos = tuple(sorted(found, key=lambda p: str(p).casefold()))
     if not photos:
         raise ValueError(f"Nenhuma fotografia JPEG encontrada: {folder}")
     wav = existing_file(sound) if sound else None

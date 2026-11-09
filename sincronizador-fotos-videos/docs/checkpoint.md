@@ -89,3 +89,17 @@ instalação/primeira exportação Windows estão concluídas. Não confundir es
 resultado com validação visual dos offsets ou certificação do exportador.
 Próximos testes: ergonomia dos campos/seletores pelo usuário, macOS, pastas grandes,
 HDR/rotação/VFR, som de disparo e sincronização visual em vários pontos da sessão.
+
+## GUI completa — continuação de 09/11/2026
+
+Busca automática pelos períodos, offset/tolerância, cache em memória com invalidação,
+leitura cancelável, progresso, descarte de resultados obsoletos, miniaturas paginadas,
+marcação manual antes do cálculo das durações/disparos e relatório com exclusões manuais.
+Pastas lembradas localmente (sem caminhos pessoais no Git), ícone e atalho Windows
+para pythonw sem terminal. CLI/núcleo reutilizados; mídia nunca é modificada.
+74 testes aprovados. Smoke test GUI com MOV e quatro JPEGs reais passou, incluindo
+4 miniaturas, recálculo automático, desmarcação e exportação de três fotos.
+A interface macOS e desempenho de milhares de JPEGs ainda precisam de avaliação.
+A primeira varredura usa um subprocesso ExifTool por JPEG; as seguintes reutilizam
+metadados válidos em cache. A confirmação do Final Cut continua sendo do XML com
+zero; antecipação de cerca de 2 s é observação, não calibração validada.

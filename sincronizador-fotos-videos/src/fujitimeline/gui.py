@@ -3,7 +3,7 @@ from datetime import datetime
 from fractions import Fraction
 from pathlib import Path
 from queue import Queue, Empty
-from threading import Thread
+from threading import Thread, Event
 import os
 import subprocess
 import sys
@@ -11,18 +11,40 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from .calibration import load_profile, save_profile
-from .desktop import Request, execute, find_tool, manual_profile, seconds
+from .desktop import Request, Session, thumbnail, find_tool, manual_profile, seconds
+from .jobs import Cancelled, check_cancel
+from . import preferences
 
 
 class App:
     def __init__(self, root):
         self.root = root
         root.title('FujiTimeline • Fotos e vídeos em sincronia')
-        root.geometry(f'1080x{min(850, root.winfo_screenheight() - 90)}')
+        if sys.platform == 'win32':
+            icon = Path(__file__).parent / 'assets' / 'fujitimeline.ico'
+            if icon.exists():
+                root.iconbitmap(str(icon))
+        window_height = min(850, root.winfo_screenheight() - 90)
+        root.geometry(f'1080x{window_height}+{max(0, (root.winfo_screenwidth() - 1080) // 2)}+30')
         root.minsize(900, 580)
         self.videos = []
         self.visible_videos = []
         self.last_dir = str(Path.home() / 'Pictures')
+        self.preferences = preferences.load()
+        self.last_dir = self.preferences.get('last_dir', self.last_dir)
+        self.session = Session()
+        self.cancel_event = Event()
+        self.thumb_cancel = Event()
+        self.unchecked = set()
+        self.review = None
+        self.revision = 0
+        self.pending = False
+        self.debounce = None
+        self.exporting = False
+        self.closing = False
+        self.page = 0
+        self.thumb_generation = 0
+        self.images = {}
         self.queue = Queue()
         self.busy = False
         self.loaded_profile = None
@@ -35,6 +57,7 @@ class App:
         style.configure('TButton', padding=7)
         style.configure('Title.TLabel', font=('Segoe UI', 24, 'bold'))
         style.configure('Accent.TButton', foreground='white', background='#18685c')
+        style.configure('Treeview', rowheight=58)
         canvas = tk.Canvas(root, highlightthickness=0)
         scrollbar = ttk.Scrollbar(root, orient='vertical', command=canvas.yview)
         scrollbar.pack(side='right', fill='y')
@@ -44,6 +67,11 @@ class App:
         content = canvas.create_window((0, 0), window=body, anchor='nw')
         body.bind('<Configure>', lambda _: canvas.configure(scrollregion=canvas.bbox('all')))
         canvas.bind('<Configure>', lambda event: canvas.itemconfigure(content, width=event.width))
+        def scroll(event):
+            if event.widget.winfo_class() not in {'Text', 'Listbox', 'TCombobox', 'Treeview'}:
+                delta = -int(event.delta / 120) if abs(event.delta) >= 120 else (-1 if event.delta > 0 else 1)
+                canvas.yview_scroll(delta, 'units')
+        root.bind('<MouseWheel>', scroll)
         ttk.Label(body, text='FujiTimeline', style='Title.TLabel').pack(anchor='w')
         ttk.Label(body, text='Suas fotos no instante certo. Mídias originais preservadas.').pack(anchor='w', pady=(0, 12))
         media = ttk.LabelFrame(body, text='1  •  Escolha suas mídias', padding=10)
@@ -60,7 +88,7 @@ class App:
         search.trace_add('write', lambda *_: self.refresh_videos())
         self.listbox = tk.Listbox(media, height=3, selectmode='extended', exportselection=False)
         self.listbox.pack(fill='x', pady=6)
-        self.path_row(media, 'photos', 'Pasta de fotos JPEG', '', 'folder')
+        self.path_row(media, 'photos', 'Pasta de fotos JPEG', self.preferences.get('photos', ''), 'folder')
         self.path_row(media, 'sound', 'Som de disparo WAV (opcional)', '', 'sound')
         self.recursive = tk.BooleanVar(value=False)
         ttk.Checkbutton(media, text='Incluir subpastas de fotos', variable=self.recursive).pack(anchor='w')
@@ -95,7 +123,7 @@ class App:
 
         destination = ttk.Frame(body)
         destination.pack(fill='x')
-        default = Path.cwd() / 'output' / ('FujiTimeline-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '.fcpxml')
+        default = Path(self.preferences.get('output_dir', str(Path.cwd() / 'output'))) / ('FujiTimeline-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '.fcpxml')
         self.path_row(destination, 'output', '3  •  Salvar timeline em', str(default), 'output')
         actions = ttk.Frame(body)
         actions.pack(fill='x', pady=8)
@@ -103,20 +131,48 @@ class App:
         self.preview_button.pack(side='left')
         self.export_button = ttk.Button(actions, text='Gerar FCPXML', style='Accent.TButton', command=lambda: self.start(True))
         self.export_button.pack(side='left', padx=8)
+        self.cancel_button = ttk.Button(actions, text='Cancelar', command=self.cancel, state='disabled')
+        self.cancel_button.pack(side='left', padx=(0, 8))
         self.open_button = ttk.Button(actions, text='Abrir pasta do resultado', command=self.open_output, state='disabled')
         self.open_button.pack(side='left')
-        self.progress = ttk.Progressbar(actions, mode='indeterminate', length=100)
+        self.progress = ttk.Progressbar(actions, mode='determinate', length=100)
         self.progress.pack(side='right')
         self.status = ttk.Label(body, text='Selecione vídeos e uma pasta de fotos para começar.')
         self.status.pack(anchor='w', pady=(0, 5))
-        columns = ('file', 'original', 'corrected', 'position', 'status')
-        self.table = ttk.Treeview(body, columns=columns, show='headings', height=5)
-        for col, title, width in zip(columns, ['Foto', 'Horário original', 'Horário corrigido', 'Timeline (s)', 'Seleção'], [160, 220, 220, 110, 90]):
+        review_bar = ttk.Frame(body)
+        review_bar.pack(fill='x', pady=4)
+        ttk.Label(review_bar, text='Buscar fotos:').pack(side='left')
+        ttk.Entry(review_bar, textvariable=self.var('photo_search', ''), width=18).pack(side='left', padx=5)
+        self.only_matches = tk.BooleanVar(value=True)
+        ttk.Checkbutton(review_bar, text='Só nos períodos dos vídeos', variable=self.only_matches,
+                        command=self.filter_photos).pack(side='left')
+        ttk.Button(review_bar, text='Marcar filtradas', command=lambda: self.mark(True)).pack(side='left', padx=4)
+        ttk.Button(review_bar, text='Desmarcar filtradas', command=lambda: self.mark(False)).pack(side='left')
+        ttk.Button(review_bar, text='‹', command=lambda: self.change_page(-1)).pack(side='left', padx=4)
+        ttk.Button(review_bar, text='›', command=lambda: self.change_page(1)).pack(side='left')
+        self.page_label = ttk.Label(review_bar, text='')
+        self.page_label.pack(side='left')
+        table_frame = ttk.Frame(body)
+        table_frame.pack(fill='both', expand=True)
+        columns = ('checked', 'file', 'original', 'corrected', 'video', 'position', 'status')
+        self.table = ttk.Treeview(table_frame, columns=columns, show='tree headings', height=4)
+        self.table.heading('#0', text='Prévia')
+        self.table.column('#0', width=85, stretch=False)
+        for col, title, width in zip(columns, ['Usar', 'Foto', 'Original', 'Corrigido', 'Vídeo', 'Posição vídeo / timeline (s)', 'Estado'], [50, 140, 205, 205, 140, 180, 110]):
             self.table.heading(col, text=title)
             self.table.column(col, width=width, minwidth=60)
-        self.table.pack(fill='both', expand=True)
+        self.table.pack(side='top', fill='both', expand=True)
+        horizontal = ttk.Scrollbar(table_frame, orient='horizontal', command=self.table.xview)
+        horizontal.pack(fill='x')
+        self.table.configure(xscrollcommand=horizontal.set)
+        self.table.bind('<ButtonRelease-1>', self.toggle_photo)
+        self.table.bind('<space>', self.toggle_photo_key)
         self.notes = tk.Text(body, height=3, wrap='word', font=('Segoe UI', 9), state='disabled')
         self.notes.pack(fill='x', pady=(5, 0))
+        for key in ('photos', 'offset', 'pair', 'mode', 'fixed', 'tolerance', 'fps', 'sound', 'timezone', 'ffprobe', 'exiftool'):
+            self.vars[key].trace_add('write', self.changed)
+        self.recursive.trace_add('write', self.changed)
+        self.vars['photo_search'].trace_add('write', lambda *_: self.filter_photos())
         root.after(100, self.poll)
         root.protocol('WM_DELETE_WINDOW', self.close)
 
@@ -169,6 +225,7 @@ class App:
             if not self.vars['photos'].get():
                 self.vars['photos'].set(self.last_dir)
         self.refresh_videos()
+        self.changed()
 
     def refresh_videos(self):
         term = self.vars['search'].get().casefold()
@@ -182,6 +239,7 @@ class App:
         removed = {self.visible_videos[i] for i in self.listbox.curselection()}
         self.videos = [p for p in self.videos if p not in removed]
         self.refresh_videos()
+        self.changed()
 
     def profile(self):
         candidate = manual_profile(self.vars['offset'].get(), self.vars['pair'].get())
@@ -219,9 +277,36 @@ class App:
         except Exception as exc:
             messagebox.showerror('Perfil', str(exc), parent=self.root)
 
-    def start(self, export):
+    def remember(self):
+        try:
+            preferences.save({'last_dir': self.last_dir, 'photos': self.vars['photos'].get(),
+                              'output_dir': str(Path(self.vars['output'].get()).parent)})
+        except OSError as exc:
+            self.status.configure(text=f'Preferências não salvas: {exc}')
+
+    def changed(self, *_):
+        self.revision += 1
+        if self.debounce:
+            self.root.after_cancel(self.debounce)
+        if self.busy:
+            self.pending = True
+            if not self.exporting:
+                self.cancel_event.set()
+        self.debounce = self.root.after(450, self.auto_start)
+
+    def auto_start(self):
+        self.debounce = None
+        if self.busy:
+            self.pending = True
+        elif self.videos and self.vars['photos'].get().strip():
+            self.start(False, automatic=True)
+
+    def start(self, export, automatic=False):
         if self.busy:
             return
+        if self.debounce:
+            self.root.after_cancel(self.debounce)
+            self.debounce = None
         try:
             v = {key: value.get().strip() for key, value in self.vars.items()}
             if not self.videos or not v['photos']:
@@ -232,54 +317,183 @@ class App:
                 mode='fixed' if v['mode'] == 'Fixa' else 'until_next', fixed=seconds(v['fixed']) if v['mode'] == 'Fixa' else Fraction(3),
                 tolerance=seconds(v['tolerance']), fps=Fraction(v['fps']), recursive=self.recursive.get(),
                 sound=Path(v['sound']).expanduser() if v['sound'] else None, timezone=v['timezone'] or None,
-                ffprobe=v['ffprobe'], exiftool=v['exiftool'])
+                ffprobe=v['ffprobe'], exiftool=v['exiftool'], unchecked=frozenset(self.unchecked))
         except Exception as exc:
-            messagebox.showerror('Confira os campos', str(exc), parent=self.root)
+            self.status.configure(text=str(exc))
+            if not automatic:
+                messagebox.showerror('Confira os campos', str(exc), parent=self.root)
             return
+        self.remember()
         self.busy = True
+        self.exporting = export
+        self.pending = False
+        revision = self.revision
+        self.cancel_event = Event()
+        cancel = self.cancel_event
         self.preview_button.configure(state='disabled')
         self.export_button.configure(state='disabled')
-        self.progress.start()
-        self.status.configure(text='Lendo metadados… Alterações nos campos valerão na próxima execução.')
-        self.table.delete(*self.table.get_children())
+        self.cancel_button.configure(state='normal')
+        self.progress.configure(value=0)
+        self.status.configure(text='Buscando fotos e lendo metadados…')
         def worker():
             try:
-                self.queue.put((execute(request, export), None, request, export))
+                def progress(done, total, message):
+                    self.queue.put(('progress', revision, done, total, message))
+                review = self.session.run(request, export, cancel, progress)
+                self.queue.put(('done', revision, review, None, request, export, automatic))
             except Exception as exc:
-                self.queue.put((None, str(exc), request, export))
+                self.queue.put(('done', revision, None, exc, request, export, automatic))
         Thread(target=worker, daemon=True).start()
 
-    def poll(self):
-        try:
-            plan, error, request, exported = self.queue.get_nowait()
-        except Empty:
-            self.root.after(100, self.poll)
+    def cancel(self):
+        self.pending = False
+        if self.debounce:
+            self.root.after_cancel(self.debounce)
+            self.debounce = None
+        self.cancel_event.set()
+        self.thumb_cancel.set()
+        self.status.configure(text='Cancelando… Se a gravação já começou, XML e relatório serão concluídos.')
+
+    def filtered_photos(self):
+        if not self.review:
+            return []
+        term = self.vars['photo_search'].get().casefold()
+        return [t for t in self.review.candidates.photo_timings
+                if term in str(t.path).casefold() and (not self.only_matches.get() or t.selected)]
+
+    def filter_photos(self):
+        self.page = 0
+        self.render_table()
+
+    def change_page(self, delta):
+        count = len(self.filtered_photos())
+        self.page = max(0, min(max(0, (count - 1) // 40), self.page + delta))
+        self.render_table()
+
+    def mark(self, value):
+        for photo in self.filtered_photos():
+            if photo.selected:
+                if value:
+                    self.unchecked.discard(photo.path)
+                else:
+                    self.unchecked.add(photo.path)
+        self.render_table()
+        self.changed()
+
+    def toggle_photo(self, event):
+        if self.table.identify_column(event.x) != '#1':
             return
-        self.busy = False
-        self.progress.stop()
-        self.preview_button.configure(state='normal')
-        self.export_button.configure(state='normal')
-        if error:
-            self.status.configure(text='Não foi possível concluir. Confira a mensagem.')
-            messagebox.showerror('FujiTimeline', error, parent=self.root)
-        else:
-            positions = {p.media.path: p.offset for p in plan.photos}
-            for photo in plan.photo_timings:
-                path = photo.path
-                self.table.insert('', 'end', values=(path.name, photo.original.raw, photo.corrected_time,
-                    f'{float(positions[path]):.3f}' if path in positions else '—', 'Incluída' if path in positions else 'Excluída'))
-            self.status.configure(text=f'{"Exportado" if exported else "Prévia por metadados"}: {len(plan.videos)} vídeo(s), {len(plan.photos)} foto(s), {len(plan.excluded)} excluída(s). Correção: {float(request.profile.offset_seconds):+.3f} s.')
-            self.notes.configure(state='normal')
-            self.notes.delete('1.0', 'end')
-            self.notes.insert('end', '\n'.join(plan.warnings) or 'Horários exatos na prévia. A exportação ajusta posições à grade de quadros do projeto.')
-            self.notes.configure(state='disabled')
-            if exported:
-                self.last_output = request.output.resolve()
-                self.open_button.configure(state='normal')
-                self.notes.configure(state='normal')
-                self.notes.insert('end', f'\nSalvo: {self.last_output}\nRelatório: {self.last_output.with_suffix(".json")}')
-                self.notes.configure(state='disabled')
-        self.root.after(100, self.poll)
+        self.toggle_item(self.table.identify_row(event.y))
+
+    def toggle_photo_key(self, event):
+        self.toggle_item(self.table.focus())
+        return 'break'
+
+    def toggle_item(self, item):
+        photo = self.row_photos.get(item) if hasattr(self, 'row_photos') else None
+        if photo and photo.selected:
+            if photo.path in self.unchecked:
+                self.unchecked.remove(photo.path)
+            else:
+                self.unchecked.add(photo.path)
+            self.render_table()
+            self.changed()
+
+    def render_table(self):
+        self.thumb_cancel.set()
+        self.thumb_cancel = Event()
+        cancel = self.thumb_cancel
+        self.thumb_generation += 1
+        generation = self.thumb_generation
+        self.images.clear()
+        self.table.delete(*self.table.get_children())
+        self.row_photos = {}
+        if not self.review:
+            return
+        photos = self.filtered_photos()
+        self.page = min(self.page, max(0, (len(photos) - 1) // 40))
+        subset = photos[self.page * 40:(self.page + 1) * 40]
+        candidates = {p.media.path: p for p in self.review.candidates.photos}
+        self.page_label.configure(text=f'{self.page + 1}/{max(1, (len(photos) + 39) // 40)} • {len(photos)} fotos')
+        jobs = []
+        for index, photo in enumerate(subset):
+            placed = candidates.get(photo.path)
+            used = photo.selected and photo.path not in self.unchecked
+            video = self.review.candidates.videos[placed.video_index].media.path.name if placed else '—'
+            position = f'{float(placed.source_offset):.3f} / {float(placed.offset):.3f}' if placed else '—'
+            state = 'Marcada' if used else ('Desmarcada' if photo.selected else 'Fora do período')
+            item = str(index)
+            self.table.insert('', 'end', iid=item, text='', values=('☑' if used else '☐', photo.path.name,
+                photo.original.raw, photo.corrected_time, video, position, state))
+            self.row_photos[item] = photo
+            jobs.append((item, photo.path))
+        def load_thumbs():
+            for item, path in jobs:
+                if cancel.is_set():
+                    return
+                try:
+                    picture = thumbnail(path)
+                except Exception:
+                    picture = None
+                self.queue.put(('thumb', generation, item, picture))
+        Thread(target=load_thumbs, daemon=True).start()
+
+    def poll(self):
+        for _ in range(80):
+            try:
+                event = self.queue.get_nowait()
+            except Empty:
+                break
+            kind = event[0]
+            if kind == 'thumb':
+                _, generation, item, picture = event
+                if generation == self.thumb_generation and picture is not None and self.table.exists(item):
+                    from PIL import ImageTk
+                    self.images[item] = ImageTk.PhotoImage(picture, master=self.root)
+                    self.table.item(item, image=self.images[item])
+            elif kind == 'progress':
+                _, revision, done, total, message = event
+                if revision == self.revision:
+                    self.progress.configure(value=100 * done / max(total, 1))
+                    self.status.configure(text=message)
+            elif kind == 'done':
+                _, revision, review, error, request, exported, automatic = event
+                self.busy = False
+                self.exporting = False
+                self.preview_button.configure(state='normal')
+                self.export_button.configure(state='normal')
+                self.cancel_button.configure(state='disabled')
+                if self.closing:
+                    self.remember()
+                    self.root.destroy()
+                    return
+                stale = revision != self.revision
+                if error:
+                    if not stale:
+                        self.status.configure(text=str(error))
+                        if not automatic and not isinstance(error, Cancelled):
+                            messagebox.showerror('FujiTimeline', str(error), parent=self.root)
+                else:
+                    plan = review.plan
+                    if not stale:
+                        self.review = review
+                        self.render_table()
+                        self.progress.configure(value=100)
+                        self.status.configure(text=f'{"Exportado" if exported else "Prévia"}: {len(plan.videos)} vídeo(s) • {len(plan.photos)} marcadas • {len(plan.manually_excluded)} desmarcadas • {len(plan.excluded)} fora do período • duração {float(plan.duration):.3f} s • offset {float(request.profile.offset_seconds):+.3f} s')
+                        self.notes.configure(state='normal')
+                        self.notes.delete('1.0', 'end')
+                        self.notes.insert('end', '\n'.join(plan.warnings) or 'Posições por metadados; exportação ajusta à grade de quadros. Clique em Usar ou pressione Espaço para marcar/desmarcar.')
+                        self.notes.configure(state='disabled')
+                    if exported:
+                        self.last_output = request.output.resolve()
+                        self.open_button.configure(state='normal')
+                        self.notes.configure(state='normal')
+                        self.notes.insert('end', f'\nSalvo: {self.last_output}\nRelatório: {self.last_output.with_suffix(".json")}')
+                        self.notes.configure(state='disabled')
+                if self.pending:
+                    self.pending = False
+                    self.auto_start()
+        self.root.after(75, self.poll)
 
     def open_output(self):
         if self.last_output:
@@ -290,9 +504,12 @@ class App:
                 subprocess.Popen(['open' if sys.platform == 'darwin' else 'xdg-open', folder])
 
     def close(self):
+        self.thumb_cancel.set()
         if self.busy:
-            messagebox.showinfo('Processamento em andamento', 'Aguarde a leitura/exportação terminar antes de fechar.', parent=self.root)
+            self.closing = True
+            self.cancel()
         else:
+            self.remember()
             self.root.destroy()
 
 
