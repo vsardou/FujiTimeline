@@ -1,6 +1,12 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from fractions import Fraction
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .calibration import CalibrationProfile
 
 
 @dataclass(frozen=True)
@@ -66,6 +72,18 @@ class SoundPlacement:
     duration: Fraction
 
 
+@dataclass(frozen=True)
+class PhotoTiming:
+    path: Path
+    original: CaptureTime
+    corrected_utc: Fraction
+    corrected_time: str
+    profile_name: str
+    offset_seconds: Fraction
+    status: str
+    selected: bool
+
+
 @dataclass
 class Timeline:
     name: str
@@ -75,3 +93,5 @@ class Timeline:
     duration: Fraction
     excluded: list[Path] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    calibration: CalibrationProfile | None = None
+    photo_timings: list[PhotoTiming] = field(default_factory=list)

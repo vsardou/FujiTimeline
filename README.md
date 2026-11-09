@@ -2,7 +2,8 @@
 
 Prova de conceito Python por linha de comando: sincroniza JPEGs Fujifilm e vídeos
 de iPhone pelos metadados e gera uma timeline editável FCPXML, referenciando as
-mídias originais. Sem calibração experimental, interface gráfica ou Google Drive.
+mídias originais. Offset zero por padrão e calibração opcional por perfil do par
+Fujifilm/iPhone. Escopo restrito à CLI, sem interface gráfica ou Google Drive.
 
 O código está em **[`sincronizador-fotos-videos/`](sincronizador-fotos-videos/)**.
 A estrutura local foi preservada: a raiz Git é a pasta acima do pacote Python.
@@ -10,6 +11,7 @@ A estrutura local foi preservada: a raiz Git é a pasta acima do pacote Python.
 - [Instalação, uso e testes no Windows/macOS](sincronizador-fotos-videos/README.md)
 - [Estado do checkpoint e pendências](sincronizador-fotos-videos/docs/checkpoint.md)
 - [Pesquisa e decisão do exportador](sincronizador-fotos-videos/docs/exporter-decision.md)
+- [Perfis de calibração, sinal e validação](sincronizador-fotos-videos/docs/calibration.md)
 
 ## Início rápido
 
@@ -41,7 +43,9 @@ os caminhos das mídias. Os arquivos gerados ficam em `output/`, ignorada pelo G
 
 CLI e testes implementados, com leitores de metadados, faixas independentes,
 dois modos de duração e exportador baseado em OpenTimelineIO. O checkpoint
-inicial tem 32 testes aprovados no Windows. A importação no Final Cut Pro, a
+inicial tem 32 testes aprovados no Windows; a continuação com perfis tem **52**.
+O preset −2,272 s é experimental e exige seleção explícita. Nenhum par de
+aparelhos reais foi declarado calibrado. A importação no Final Cut Pro, a
 execução nativa no macOS e a sincronização das mídias reais ainda não foram
 validadas. Consulte o documento de estado para o alcance exato da verificação.
 

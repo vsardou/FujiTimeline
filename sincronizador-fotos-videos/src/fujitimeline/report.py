@@ -1,6 +1,7 @@
 """Portable, auditable planning output; rational seconds are stored as strings."""
 
 from dataclasses import asdict
+from decimal import Decimal
 from fractions import Fraction
 import json
 from pathlib import Path
@@ -10,7 +11,7 @@ from .models import Timeline
 
 def to_json(timeline: Timeline) -> str:
     def encode(value):
-        if isinstance(value, (Path, Fraction)):
+        if isinstance(value, (Path, Fraction, Decimal)):
             return str(value)
         raise TypeError(type(value).__name__)
     return json.dumps(asdict(timeline), default=encode, ensure_ascii=False, indent=2) + "\n"

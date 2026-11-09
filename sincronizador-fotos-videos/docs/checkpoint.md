@@ -6,11 +6,12 @@
 - Branch de trabalho: `codex/fujitimeline`.
 - Antes deste checkpoint, não havia commits nem remotos, nem outros projetos
   nessa raiz. Mantida a estrutura original; nenhum histórico foi reescrito.
+- Checkpoint inicial preservado: `b10287d24d0cb3d52c64687897ccc602a110c453`.
 - Publicação autorizada em repositório privado `vsardou/FujiTimeline`.
 - Versionados somente Python, testes, documentação, `pyproject.toml` e regras
   de exclusão. Ambientes, caches, logs, saídas, segredos e mídias ficam locais.
 
-## Implementado
+## Implementado no checkpoint inicial
 
 Leitura somente por metadados via FFprobe/ExifTool, tempos racionais e fusos
 explícitos, seleção de JPEGs, concatenação cronológica dos vídeos, tolerância
@@ -19,7 +20,26 @@ opcional e exportação FCPXML 1.8 com o adaptador OpenTimelineIO fixado.
 
 O JSON conserva os instantes exatos. A edição exportada usa a grade de quadros
 escolhida, limita a cauda de vídeos a quadros completos e registra diferenças.
-Não há correção de −2,272 s, ajuste automático de relógios, GUI ou Drive.
+Esse commit inicial não aplicava correção de −2,272 s. A restrição foi
+substituída por autorização explícita do proprietário na continuação abaixo.
+O commit original permanece disponível, sem reescrita de histórico.
+
+## Continuação autorizada: calibração opcional
+
+- Perfis por identificador do par, sem inventar modelos de aparelhos.
+- Zero é padrão; o preset `experimental-minus-2.272` exige seleção explícita.
+- Convenção: horário corrigido = original + offset; offset negativo antecipa.
+- Correção exata antes da seleção; mídia e CaptureTime originais preservados.
+- Perfis salvos e reutilizados localmente. Validação/recalibração escreve nova
+  revisão e digest do perfil anterior; nenhuma revisão anterior é sobrescrita.
+- Validação exige ao menos quatro fotos distintas, duas no primeiro quinto e
+  duas no último quinto da sessão, resíduos dentro da tolerância e avaliação de
+  deriva por grupos e regressão. Dados declarados simulados não validam perfis reais.
+- Relatório contém perfil/status/offset/revisão e horários originais/corrigidos,
+  inclusive para fotos excluídas após a correção. Perfis/evidências ficam fora do Git.
+- **52 testes aprovados** no Windows. Nenhum perfil de aparelhos reais foi
+  validado nesta entrega; `validated` em testes refere-se somente às fixtures.
+- Guia completo: [calibration.md](calibration.md). Sem GUI ou integração Drive.
 
 ## Evidência de verificação
 
@@ -37,6 +57,8 @@ Não há correção de −2,272 s, ajuste automático de relógios, GUI ou Drive
 1. Disponibilizar FFprobe e ExifTool (não encontrados no PATH da sessão de
    preparação); executar `plan` com as mídias originais. Não impor os tempos
    simulados às mídias reais. Confirmar tag selecionada, fuso e subsequundos.
+   Se usar calibração, reunir correspondências reais no início/fim da sessão;
+   o preset −2,272 s permanece experimental até essa verificação.
 2. Gerar XML real e validar contra a DTD oficial da Apple da versão 1.8.
 3. No Mac, executar instalação/testes e importar XML no Final Cut Pro.
    Conferir relink, duração, faixas, áudio original, disparos, rotação e HDR.

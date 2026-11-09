@@ -1,13 +1,17 @@
 from fractions import Fraction
 
-from .models import (Photo, PhotoPlacement, Sound, SoundPlacement, Timeline,
+from .calibration import CalibrationProfile, check_profile, corrected_time, zero_profile
+from .models import (Photo, PhotoPlacement, PhotoTiming, Sound, SoundPlacement, Timeline,
                      Video, VideoPlacement)
 
 
 def build_timeline(videos: list[Video], photos: list[Photo], *,
                    tolerance: Fraction = Fraction(0), mode: str = "until_next",
                    fixed_duration: Fraction = Fraction(3), sound: Sound | None = None,
-                   fps: Fraction = Fraction(30), name: str = "FujiTimeline") -> Timeline:
+                   fps: Fraction = Fraction(30), name: str = "FujiTimeline",
+                   profile: CalibrationProfile | None = None) -> Timeline:
+    profile = profile or zero_profile()
+    check_profile(profile)
     if not 0 <= tolerance <= 60:
         raise ValueError("A tolerância deve estar entre 0 e 60 segundos.")
     if mode not in {"until_next", "fixed"}:
@@ -24,16 +28,26 @@ def build_timeline(videos: list[Video], photos: list[Photo], *,
         placements.append(VideoPlacement(video, cursor))
         cursor += video.duration
     result = Timeline(name, placements, [], [], cursor)
+    result.calibration = profile
+    if profile.status != "uncalibrated":
+        result.warnings.append(f"Perfil {profile.name} ({profile.pair_id}): offset {profile.offset_seconds}s, status {profile.status}.")
+    if profile.validation and profile.validation.reasons:
+        result.warnings.extend(profile.validation.reasons)
     candidates = []
     for photo in sorted(photos, key=lambda p: (p.captured.utc, str(p.path))):
+        # Correction is applied BEFORE coverage selection, retaining original EXIF.
+        corrected = photo.captured.utc + profile.offset_seconds
         matches = []
         for i, placed in enumerate(placements):
-            relative = photo.captured.utc - placed.media.captured.utc
+            relative = corrected - placed.media.captured.utc
             duration = placed.media.duration
             inside = 0 <= relative < duration
             distance = max(-relative, relative - duration, Fraction(0))
             if inside or (tolerance > 0 and distance <= tolerance):
                 matches.append((not inside, distance, i, relative))
+        result.photo_timings.append(PhotoTiming(photo.path, photo.captured, corrected,
+                                               corrected_time(photo.captured, profile.offset_seconds),
+                                               profile.name, profile.offset_seconds, profile.status, bool(matches)))
         if not matches:
             result.excluded.append(photo.path)
             continue

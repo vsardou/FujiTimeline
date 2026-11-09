@@ -17,6 +17,10 @@ auth.json
 *.log
 logs/
 output/
+profiles/
+calibration-evidence/
+*.profile.json
+*.evidence.json
 build/
 dist/
 .DS_Store

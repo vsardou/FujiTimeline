@@ -6,6 +6,13 @@ __pycache__/
 build/
 dist/
 output/
+profiles/
+calibration-evidence/
+*.profile.json
+*.evidence.json
+.env
+.env.*
+*.log
 .DS_Store
 *.MOV
 *.mov
