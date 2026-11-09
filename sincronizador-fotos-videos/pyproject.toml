@@ -20,6 +20,9 @@ dev = ["pytest>=8,<10"]
 [project.scripts]
 fujitimeline = "fujitimeline.cli:main"
 
+[project.gui-scripts]
+fujitimeline-gui = "fujitimeline.gui:main"
+
 [tool.setuptools.packages.find]
 where = ["src"]
 

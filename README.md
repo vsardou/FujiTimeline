@@ -3,7 +3,7 @@
 Prova de conceito Python por linha de comando: sincroniza JPEGs Fujifilm e vídeos
 de iPhone pelos metadados e gera uma timeline editável FCPXML, referenciando as
 mídias originais. Offset zero por padrão e calibração opcional por perfil do par
-Fujifilm/iPhone. Escopo restrito à CLI, sem interface gráfica ou Google Drive.
+Fujifilm/iPhone. CLI e interface desktop Tkinter autorizada em 09/11/2026. Sem integração Google Drive.
 
 O código está em **[`sincronizador-fotos-videos/`](sincronizador-fotos-videos/)**.
 A estrutura local foi preservada: a raiz Git é a pasta acima do pacote Python.
@@ -41,13 +41,17 @@ os caminhos das mídias. Os arquivos gerados ficam em `output/`, ignorada pelo G
 
 ## Estado atual
 
-CLI e testes implementados, com leitores de metadados, faixas independentes,
-dois modos de duração e exportador baseado em OpenTimelineIO. O checkpoint
-inicial tem 32 testes aprovados no Windows; a continuação com perfis tem **52**.
-O preset −2,272 s é experimental e exige seleção explícita. Nenhum par de
-aparelhos reais foi declarado calibrado. A importação no Final Cut Pro, a
-execução nativa no macOS e a sincronização das mídias reais ainda não foram
-validadas. Consulte o documento de estado para o alcance exato da verificação.
+CLI e interface desktop implementadas, com leitores de metadados, faixas
+independentes, dois modos de duração e exportador baseado em OpenTimelineIO.
+**68 testes aprovados no Windows.** A interface permite escolher arquivos,
+filtrar a lista de vídeos, analisar horários, informar correção manual e salvar perfis.
+Abra `sincronizador-fotos-videos/Abrir FujiTimeline.bat` após instalar o ambiente.
+
+O usuário confirmou a importação e religação das mídias reais no Final Cut Pro.
+A GUI também exportou o vídeo e as quatro fotos reais em teste local Windows.
+Execução nativa no macOS, sincronização visual precisa, HDR/VFR e áudio ainda
+exigem validação. Nenhum par real foi declarado calibrado; ajustes manuais e
+preset −2,272 s continuam experimentais. Consulte o documento de estado.
 
 O repositório é privado. A criação/push pelo Git não concede automaticamente
 acesso à conexão GitHub de outra conversa: o proprietário precisa permitir

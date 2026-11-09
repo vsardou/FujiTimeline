@@ -1,6 +1,7 @@
 """Read-only subprocess adapters. Never use filesystem dates as capture dates."""
 
 import json
+import os
 import subprocess
 from decimal import Decimal
 from fractions import Fraction
@@ -13,7 +14,8 @@ from .temporal import parse_timestamp
 def run_json(command: list[str]):
     try:
         completed = subprocess.run(command, check=True, capture_output=True,
-                                   encoding="utf-8", errors="replace", timeout=120)
+                                   encoding="utf-8", errors="replace", timeout=120,
+                                   creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     except FileNotFoundError as exc:
         raise ValueError(f"Ferramenta não encontrada: {command[0]}. Instale-a ou informe seu caminho.") from exc
     except subprocess.TimeoutExpired as exc:

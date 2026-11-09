@@ -1,9 +1,9 @@
-# FujiTimeline — prova de conceito CLI
+# FujiTimeline — CLI e interface desktop
 
 Projeto pessoal em Python 3.11+ para sincronizar JPEGs Fujifilm com vídeos de iPhone
 pelos metadados de captura e gerar uma timeline editável FCPXML 1.8. Desenvolvido
-inicialmente no Windows; código e caminhos portáveis para macOS. Importação no
-Final Cut Pro ainda exige validação em um Mac.
+inicialmente no Windows; código e caminhos portáveis para macOS. O usuário confirmou a importação e religação de mídias reais no
+Final Cut Pro. A precisão visual da sincronização ainda está em avaliação.
 
 Não renderiza, copia, altera nem recomprime mídias. Escreve apenas novos arquivos
 JSON/FCPXML e perfis locais. Sem perfil selecionado, o offset é zero. A atualização
@@ -45,7 +45,7 @@ python3 -m venv .venv
 
 Dependências Python: OpenTimelineIO 0.18.1, adaptador otio-fcpx-xml-adapter 1.0.0,
 tzdata; pytest para desenvolvimento. As duas primeiras estão fixadas porque o
-exportador estende pontos internos do adaptador. Não há dependência de GUI ou Drive.
+exportador estende pontos internos do adaptador. A interface usa Tkinter (distribuído com muitas instalações Python); não há integração Drive.
 
 ## Uso real
 
@@ -195,3 +195,44 @@ Metadados podem descrever criação do contêiner em vez da captura, ou vir de u
 relógio impreciso; o programa os utiliza literalmente por padrão, ou soma apenas
 o offset explicitamente selecionado. A validação matemática depende de
 correspondências reais conferidas pelo usuário e só cobre a sessão medida.
+
+## Interface desktop — entrega de 09/11/2026
+
+No Windows, dê dois cliques em **Abrir FujiTimeline.bat**, na pasta do projeto.
+Ou execute `.\.venv\Scripts\python.exe -m fujitimeline.gui`.
+No macOS, execute `.venv/bin/python -m fujitimeline.gui`.
+A instalação Python precisa incluir Tkinter/Tk; verifique com `python -m tkinter`
+(usando o executável do ambiente). Não é ainda um instalador EXE/App independente.
+Após reinstalar o pacote editável, também está disponível `fujitimeline-gui`.
+
+1. Adicione um ou mais vídeos pelo seletor nativo. A lista remove duplicatas;
+   o filtro pesquisa nome/caminho sem retirar vídeos da seleção. Remover atua
+   somente sobre linhas selecionadas. Os seletores reutilizam a última pasta
+   durante a sessão; nenhum histórico de caminhos pessoais é enviado ao Git.
+2. Escolha a pasta JPEG; subpastas são opcionais. Ao adicionar vídeos, a pasta
+   deles preenche o campo de fotos se estiver vazio. O WAV é opcional.
+3. Informe a correção: `0` (padrão), `-2,202`, `+2.202` ou `-00:02,202`.
+   Horário corrigido = original + correção. Negativo antecipa, positivo atrasa.
+   Para correção não zero, dê um nome ao par câmera/iPhone. Não há modelo presumido.
+   Ajustes manuais são experimentais. Salvar/carregar perfis é explícito;
+   iniciar uma nova janela sempre começa em zero. Perfis existentes não são sobrescritos.
+4. Use **Analisar e ver horários** para conferir originais, corrigidos, posição
+   exata em segundos e excluídas. A leitura ocorre em segundo plano. Alterações
+   nos campos durante o processamento só valem na próxima execução; a exportação
+   relê as entradas atuais. O filtro de vídeos não altera a lista processada.
+5. Escolha um destino novo e clique **Gerar FCPXML**. O JSON é salvo ao lado,
+   com o mesmo nome. XML/JSON existentes não são sobrescritos. Abra a pasta pelo botão.
+
+Opções avançadas permitem indicar executáveis e um fuso apenas se ausente nos
+metadados; o padrão é não presumir fuso. A prévia usa tempos exatos, e o FCPXML
+ajusta posições à grade de quadros selecionada, registrando diferenças no relatório.
+A interface não reproduz mídias nem valida visualmente um perfil; essa validação
+continua disponível pela CLI com evidências. Perfis com offsets fracionários sem
+representação decimal exata devem ser usados pela CLI.
+
+Verificação desta entrega: 68 testes automatizados; teste da janela no Windows
+com 1 MOV e 4 JPEGs reais, filtro da lista e exportação. Correção manual −2,202 s
+posicionou a primeira foto em 10,458 s antes do ajuste à grade de quadros.
+Ainda falta testar seletor nativo e layout no macOS, grandes pastas e diferentes
+escalas de tela. Importação/relink confirmados pelo usuário se referem ao XML
+anterior com offset zero, não ao novo XML corrigido.

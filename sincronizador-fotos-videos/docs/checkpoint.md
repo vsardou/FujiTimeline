@@ -74,3 +74,18 @@ README da raiz, deste documento e da decisão do exportador antes de alterar
 código. O acesso pela conexão GitHub deve ser verificado separadamente; se
 recusado, o proprietário seleciona FujiTimeline nas permissões da conexão.
 Nunca compartilhar tokens ou arquivos de autenticação no repositório/chat.
+
+## Atualização — interface autorizada em 09/11/2026
+
+A solicitação de interface substitui a antiga restrição de escopo somente CLI.
+GUI nativa Tkinter, serviço desktop separado, lançador Windows, correção editável
+em segundos ou HH:MM:SS (vírgula/ponto), prévia, perfis e exportação sem sobrescrita.
+CLI e ausência de integração Drive preservadas. Metadados originais intactos.
+68 testes passaram; smoke test da GUI com mídias reais passou (4 fotos,
+primeira em 10,458 s com offset manual experimental −2,202 s).
+O usuário confirmou importação/relink no Final Cut do XML anterior com zero.
+FFprobe e ExifTool estão instalados nesta máquina; as pendências antigas de
+instalação/primeira exportação Windows estão concluídas. Não confundir esse
+resultado com validação visual dos offsets ou certificação do exportador.
+Próximos testes: ergonomia dos campos/seletores pelo usuário, macOS, pastas grandes,
+HDR/rotação/VFR, som de disparo e sincronização visual em vários pontos da sessão.
