@@ -44,3 +44,18 @@ em um segundo Mac ainda precisa ser testada.
 
 Para atualizar, baixe uma nova cópia do código e repita a instalação. Não copie
 a `.venv` de outro computador. Mantenha suas mídias e saídas fora da pasta do código.
+
+## Aplicativo empacotado — Apple Silicon
+
+Pacote de teste 0.1.1 para macOS 12+ e M1 ou mais novo:
+[baixar aplicativo](https://github.com/vsardou/FujiTimeline/releases/download/v0.1.1-mac/FujiTimeline-0.1.1-macOS-AppleSilicon.zip).
+Extraia e arraste FujiTimeline.app para Aplicativos. Não precisa instalar Python,
+Homebrew, FFmpeg ou ExifTool. O ExifTool incluído usa /usr/bin/perl do macOS.
+Final Cut/Resolve não estão incluídos. Não serve para Mac Intel.
+
+Assinatura ad-hoc, sem notarização Apple: o macOS pode bloquear a abertura inicial.
+O pacote foi aberto após extração em outra pasta no Mac de desenvolvimento, com
+PATH limitado ao sistema, leitura real de mídia e exportações dos dois perfis.
+Ainda falta teste em um segundo Mac. 91 testes automatizados passaram.
+O código de build está em packaging/build-mac.sh; requer PyInstaller 6.22.3,
+FFprobe arm64 e distribuição ExifTool 13.61 no computador de build.

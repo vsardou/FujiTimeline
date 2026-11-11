@@ -56,3 +56,16 @@ def test_desktop_workflow_exports_corrected_timeline(tmp_path, monkeypatch):
     assert preview.photos == exported.photos
     assert target.exists() and target.with_suffix('.json').exists()
     assert exported.photos[0].offset == F('10.458')
+
+
+def test_frozen_bundle_prefers_its_own_tools(tmp_path, monkeypatch):
+    import sys
+    from fujitimeline.desktop import find_tool
+    monkeypatch.setattr(sys, 'frozen', True, raising=False)
+    monkeypatch.setattr(sys, '_MEIPASS', str(tmp_path), raising=False)
+    for relative in ('ffprobe', 'exiftool/exiftool'):
+        path = tmp_path / 'tools' / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('bundled fixture')
+    assert find_tool('ffprobe') == str(tmp_path / 'tools/ffprobe')
+    assert find_tool('exiftool') == str(tmp_path / 'tools/exiftool/exiftool')

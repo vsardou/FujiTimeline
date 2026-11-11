@@ -6,6 +6,7 @@ from pathlib import Path
 import os
 import re
 import shutil
+import sys
 
 from .calibration import CalibrationProfile, zero_profile
 from .metadata import MetadataReader, record_missing_dates
@@ -41,6 +42,11 @@ def manual_profile(offset: str, pair: str) -> CalibrationProfile:
 
 
 def find_tool(name: str) -> str:
+    if getattr(sys, "frozen", False):
+        base = Path(sys._MEIPASS) / "tools"
+        bundled = base / ("exiftool/exiftool" if name == "exiftool" else name)
+        if bundled.is_file():
+            return str(bundled)
     found = shutil.which(name)
     if found:
         return found
