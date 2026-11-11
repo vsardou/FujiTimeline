@@ -34,11 +34,16 @@ class FujiAdapter(FcpxOtio):
         info = item.media_reference.metadata.get("fuji", {}) if isinstance(item, otio.schema.Clip) else {}
         width, height = info.get("width", 0) or self.width, info.get("height", 0) or self.height
         still = info.get("kind") == "photo"
-        key = (width, height, still)
+        rate = Fraction(info.get("fps", self.fps))
+        key = (width, height, still, rate if not still else None)
         if key not in self.formats:
             attributes = {"id": self._resource_id_generator(), "width": str(width), "height": str(height)}
             if not still:
-                attributes["frameDuration"] = xml_time(1 / self.fps)
+                attributes["frameDuration"] = xml_time(1 / rate)
+                # Explicit preset used by the real Mac/FCP import checkpoint.
+                attributes["name"] = "FFVideoFormatCustom"
+                if (width, height, rate) == (1920, 1080, Fraction(30)):
+                    attributes["name"] = "FFVideoFormat1080p30"
             self.formats[key] = ET.SubElement(self.resource_element, "format", attributes)
         return self.formats[key]
 
@@ -66,6 +71,8 @@ class FujiAdapter(FcpxOtio):
         resource_id = super()._add_asset(clip, compound_only)
         info = clip.media_reference.metadata["fuji"]
         asset = self._asset_by_id(resource_id)
+        if info["kind"] == "sound":
+            asset.attrib.pop("format", None)
         if info["channels"]:
             asset.set("hasAudio", "1")
             asset.set("audioSources", "1")
@@ -125,6 +132,14 @@ def render_fcpxml(plan: Timeline, fps: Fraction = Fraction(30),
     ids = [e.get("id") for e in root.findall("./resources/*")]
     if len(ids) != len(set(ids)) or any(e.get("ref") not in ids for e in root.iter() if e.get("ref")):
         raise ValueError("Referências inconsistentes no FCPXML.")
+    for project in root.findall("./project"):
+        if not project.get("uid"):
+            project.attrib.pop("uid", None)
+    for seq in root.findall("./project/sequence"):
+        seq.set("tcStart", "0s")
+        seq.set("audioLayout", "stereo")
+        seq.set("audioRate", "48k")
+    xml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n' + ET.tostring(root, encoding="unicode")
     return xml, notes
 
 

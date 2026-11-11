@@ -479,7 +479,7 @@ class App:
                         self.review = review
                         self.render_table()
                         self.progress.configure(value=100)
-                        self.status.configure(text=f'{"Exportado" if exported else "Prévia"}: {len(plan.videos)} vídeo(s) • {len(plan.photos)} marcadas • {len(plan.manually_excluded)} desmarcadas • {len(plan.excluded)} fora do período • duração {float(plan.duration):.3f} s • offset {float(request.profile.offset_seconds):+.3f} s')
+                        self.status.configure(text=f'{"Exportado" if exported else "Prévia"}: {len(plan.videos)} vídeo(s) • {len(plan.photos)} marcadas • {len(plan.manually_excluded)} desmarcadas • {len(plan.excluded)} fora do período • {len(plan.skipped_missing_capture_time)} sem data • duração {float(plan.duration):.3f} s • offset {float(request.profile.offset_seconds):+.3f} s')
                         self.notes.configure(state='normal')
                         self.notes.delete('1.0', 'end')
                         self.notes.insert('end', '\n'.join(plan.warnings) or 'Posições por metadados; exportação ajusta à grade de quadros. Clique em Usar ou pressione Espaço para marcar/desmarcar.')

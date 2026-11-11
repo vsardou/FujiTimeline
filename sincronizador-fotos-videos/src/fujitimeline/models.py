@@ -96,3 +96,4 @@ class Timeline:
     warnings: list[str] = field(default_factory=list)
     calibration: CalibrationProfile | None = None
     photo_timings: list[PhotoTiming] = field(default_factory=list)
+    skipped_missing_capture_time: list[Path] = field(default_factory=list)

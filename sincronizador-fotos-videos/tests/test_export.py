@@ -11,6 +11,16 @@ from fujitimeline.models import Sound
 from fujitimeline.timeline import build_timeline
 
 
+def test_standard_hd_format_matches_real_mac_import_checkpoint():
+    xml, _ = render_fcpxml(demo_timeline(), F(30), width=1920, height=1080)
+    root = ET.fromstring(xml)
+    sequence = root.find('./project/sequence')
+    fmt = next(f for f in root.findall('./resources/format') if f.get('id') == sequence.get('format'))
+    assert fmt.get('name') == 'FFVideoFormat1080p30'
+    assert fmt.get('frameDuration') == '1/30s'
+    assert not root.find('./resources/format[@width="7728"]').get('name')
+
+
 @pytest.mark.parametrize("fps", [F(30), F(25), F(30000, 1001)])
 def test_export_resources_lanes_and_absolute_photo_times(fps):
     plan = demo_timeline(sound=Sound(Path("click.wav"), F("0.15")))
@@ -104,3 +114,25 @@ def test_source_bytes_are_not_changed(tmp_path):
     export_fcpxml(build_timeline([video], [photo]), tmp_path / "result.fcpxml")
     after = [(p.read_bytes(), p.stat().st_mtime_ns) for p in (video_path, photo_path)]
     assert before == after
+
+
+def test_portrait_source_rate_is_independent_of_project_rate():
+    demo = demo_timeline()
+    video = replace(demo.videos[0].media, width=1080, height=1920, fps=F(30000, 1001))
+    plan = build_timeline([video], [demo.photos[0].media])
+    root = ET.fromstring(render_fcpxml(plan, F(30))[0])
+    formats = {f.get('id'): f for f in root.findall('./resources/format')}
+    project_format = formats[root.find('./project/sequence').get('format')]
+    asset = next(a for a in root.findall("./resources/asset") if a.get("src") == video.path.resolve().as_uri())
+    source_format = formats[asset.get('format')]
+    assert project_format.get('name') == 'FFVideoFormatCustom'
+    assert project_format.get('frameDuration') == '1/30s'
+    assert source_format.get('frameDuration') == '1001/30000s'
+    assert source_format.get('id') != project_format.get('id')
+    assert seconds(root.find('./project/sequence/spine/asset-clip/clip').get('offset')) == round(plan.photos[0].offset * 30) / F(30)
+
+
+def test_audio_only_resource_does_not_claim_video_format():
+    root = ET.fromstring(render_fcpxml(demo_timeline(sound=Sound(Path('click.wav'), F('0.15'))))[0])
+    sound = next(a for a in root.findall('./resources/asset') if a.get('hasVideo') == '0')
+    assert sound.get('format') is None

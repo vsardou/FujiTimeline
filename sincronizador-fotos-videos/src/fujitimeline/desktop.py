@@ -8,7 +8,7 @@ import re
 import shutil
 
 from .calibration import CalibrationProfile, zero_profile
-from .metadata import MetadataReader
+from .metadata import MetadataReader, record_missing_dates
 from .selection import select_files
 from .timeline import build_timeline
 from .export_fcpxml import export_fcpxml
@@ -81,6 +81,7 @@ def execute(request: Request, export: bool = False):
                           profile=request.profile, tolerance=request.tolerance, mode=request.mode,
                           fixed_duration=request.fixed, fps=request.fps,
                           sound=reader.sound(inputs.sound) if inputs.sound else None)
+    record_missing_dates(plan, reader.skipped_missing_capture_time)
     if export:
         plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps))
         write_new(report, to_json(plan), '.json')
@@ -116,7 +117,7 @@ class Session:
             stat = path.stat()
             key = (path, stat.st_size, stat.st_mtime_ns, kind, request.timezone, request.ffprobe, request.exiftool)
             if key not in self.cache:
-                self.cache[key] = reader.photos((path,))[0] if kind == 'photo' else getattr(reader, kind)(path)
+                self.cache[key] = next(iter(reader.photos((path,))), None) if kind == 'photo' else getattr(reader, kind)(path)
             self.cache.move_to_end(key)
             value = self.cache[key]
             while len(self.cache) > 10000:
@@ -125,13 +126,21 @@ class Session:
             progress(count, total, f'{count}/{total} • {path.name}')
             return value
         videos = [read(p, 'video') for p in inputs.videos]
-        photos = [read(p, 'photo') for p in inputs.photos]
+        photos, skipped = [], []
+        for path in inputs.photos:
+            photo = read(path, 'photo')
+            if photo is None:
+                skipped.append(path)
+            else:
+                photos.append(photo)
         sound = read(inputs.sound, 'sound') if inputs.sound else None
         options = dict(profile=request.profile, tolerance=request.tolerance, mode=request.mode,
                        fixed_duration=request.fixed, fps=request.fps, sound=sound)
         check_cancel(cancel)
         candidates = build_timeline(videos, photos, **options)
         plan = build_timeline(videos, [p for p in photos if p.path not in request.unchecked], **options)
+        record_missing_dates(candidates, skipped)
+        record_missing_dates(plan, skipped)
         plan.manually_excluded = [p.path for p in photos if p.path in request.unchecked]
         # Preserve audit data even for manually excluded photos.
         selected = {p.media.path for p in plan.photos}

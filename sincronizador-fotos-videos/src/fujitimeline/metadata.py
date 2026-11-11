@@ -13,6 +13,15 @@ from .temporal import parse_timestamp
 from .jobs import check_cancel
 
 
+class MissingPhotoCaptureTime(ValueError):
+    """A JPEG without a capture date is not a synchronization candidate."""
+
+
+def record_missing_dates(plan, paths):
+    plan.skipped_missing_capture_time = list(paths)
+    plan.warnings.extend(f'{path.name}: ignorada; sem data/hora de captura EXIF.' for path in paths)
+
+
 def run_json(command: list[str], cancel=None):
     try:
         if cancel is None:
@@ -126,7 +135,7 @@ def photo_from_exif(path: Path, data: dict, assume_timezone: str | None = None) 
     if not raw:
         raw = tag("DateTimeOriginal")
         if not raw:
-            raise ValueError(f"DateTimeOriginal ausente em {path}.")
+            raise MissingPhotoCaptureTime(f"DateTimeOriginal ausente em {path}.")
         raw = str(raw)
         subsec, offset = tag("SubSecTimeOriginal"), tag("OffsetTimeOriginal")
         if subsec is not None and str(subsec).strip():
@@ -150,6 +159,7 @@ class MetadataReader:
         self.ffprobe, self.exiftool = ffprobe, exiftool
         self.assume_timezone = assume_timezone
         self.cancel = cancel
+        self.skipped_missing_capture_time = []
 
     def video(self, path: Path) -> Video:
         return video_from_probe(path, probe(path, self.ffprobe, self.cancel), self.assume_timezone)
@@ -159,6 +169,7 @@ class MetadataReader:
         # One file per subprocess avoids Windows command-line limits and keeps
         # errors attributable. Batch/stay_open is a later performance improvement.
         for path in paths:
+            check_cancel(self.cancel)
             command = [self.exiftool, "-j", "-G1", "-s", "-n",
                              "-DateTimeOriginal", "-SubSecTimeOriginal", "-OffsetTimeOriginal",
                              "-SubSecDateTimeOriginal", "-ImageWidth", "-ImageHeight",
@@ -166,7 +177,10 @@ class MetadataReader:
             data = run_json(command) if self.cancel is None else run_json(command, self.cancel)
             if not isinstance(data, list) or len(data) != 1:
                 raise ValueError(f"Resposta inesperada do ExifTool para {path}.")
-            photos.append(photo_from_exif(path, data[0], self.assume_timezone))
+            try:
+                photos.append(photo_from_exif(path, data[0], self.assume_timezone))
+            except MissingPhotoCaptureTime:
+                self.skipped_missing_capture_time.append(path.resolve())
         return photos
 
     def sound(self, path: Path) -> Sound:

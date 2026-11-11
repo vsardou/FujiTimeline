@@ -71,3 +71,17 @@ O XML de demonstração foi validado com `lxml.etree.DTD` usando uma
 projeto. Esta checagem adicional não faz parte dos testes offline e não implica
 que o Final Cut Pro tenha sido executado. A validação final deve usar a DTD
 obtida da Apple e a versão do editor no Mac de destino.
+
+
+## Correção de formatos verticais e taxas mistas — 2026-11-11
+
+O gerador nomeava apenas 1920x1080 a 30 fps. Agora formatos não padronizados
+usam FFVideoFormatCustom. Formatos de fonte incluem o FPS racional da mídia
+na chave de reutilização; o projeto mantém sua grade explicitamente escolhida.
+Assim, um vídeo 1080x1920 a 30000/1001 não é declarado como fonte 30 fps.
+Recursos exclusivamente de áudio não recebem formato de vídeo. Nenhum timestamp
+de captura, correção de sincronização ou arquivo de mídia foi alterado.
+
+82 testes passaram. O caso real testevacca2 foi reexportado pelo gerador usando
+os tempos do JSON original e passou na DTD Apple 1.8. A importação real não foi
+confirmada: o acesso ao Final Cut terminou em timeout em duas tentativas.

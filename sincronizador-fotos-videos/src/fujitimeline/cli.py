@@ -8,7 +8,7 @@ from .calibration import (EXPERIMENTAL_PRESET, CalibrationProfile, experimental_
                           save_profile, select_profile)
 from .demo import demo_timeline
 from .export_fcpxml import export_fcpxml
-from .metadata import MetadataReader
+from .metadata import MetadataReader, record_missing_dates
 from .report import to_json, write_new
 from .selection import select_files
 from .timeline import build_timeline
@@ -112,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             plan = build_timeline([reader.video(p) for p in inputs.videos], reader.photos(inputs.photos),
                                   sound=reader.sound(inputs.sound) if inputs.sound else None,
                                   tolerance=args.tolerance, **options)
+            record_missing_dates(plan, reader.skipped_missing_capture_time)
         output = args.output
         if args.command == "export" and output is None:
             output = Path("output/FujiTimeline.fcpxml")

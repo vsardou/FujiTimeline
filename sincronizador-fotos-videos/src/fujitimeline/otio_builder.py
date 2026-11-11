@@ -42,6 +42,7 @@ def build_otio(plan: Timeline, fps: Fraction = Fraction(30)) -> tuple[otio.schem
         reference.metadata["fuji"] = {
             "kind": kind, "duration": str(asset_duration), "source_start": str(source_start),
             "width": getattr(media, "width", 0), "height": getattr(media, "height", 0),
+            "fps": str(getattr(media, "fps", fps)),
             "channels": getattr(media, "audio_channels", getattr(media, "channels", 0)),
             "sample_rate": getattr(media, "audio_rate", getattr(media, "sample_rate", 48000)),
         }

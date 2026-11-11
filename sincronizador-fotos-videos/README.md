@@ -108,7 +108,7 @@ use um nome novo para cada execução. `python -m fujitimeline --help` lista os 
   selecionada como início da gravação. Duração: `duration_ts × time_base`,
   depois duração da faixa/contêiner. Não utiliza datas de criação/modificação do disco.
 - JPEG: ExifTool, `SubSecDateTimeOriginal`, ou composição de `DateTimeOriginal`,
-  `SubSecTimeOriginal` e `OffsetTimeOriginal`. Falta de horário é erro explícito.
+  `SubSecTimeOriginal` e `OffsetTimeOriginal`. JPEGs sem data/hora de captura são ignorados com aviso e listados em `skipped_missing_capture_time` no JSON. Datas inválidas, fuso ausente e falhas das ferramentas continuam sendo erros explícitos.
 - Frações de segundo arbitrárias são mantidas como `Fraction`; UTC serve para
   comparar instantes. Valor original, tag de origem, offset e fuso informado
   pelo usuário são preservados no JSON. Um offset selecionado é somado a esse
@@ -267,3 +267,12 @@ correção −2,202 s, desmarcação de uma foto, duração da primeira recalcul
 bytes/mtime de JPEGs têm testes automatizados. O teste real não valida o offset:
 zero importou no Final Cut; antecipação próxima de 2 s foi observada pelo usuário,
 mas o valor exato ainda não foi validado. Sem alteração de mídias e sem Drive.
+
+## Busca em pastas mistas — macOS, 09/11/2026
+
+Pode selecionar Downloads diretamente, sem incluir subpastas. A busca ignora JPEGs sem data/hora de captura e informa o nome em avisos e no JSON (`skipped_missing_capture_time`). Fotos datadas entram somente nos períodos dos vídeos após o offset e a tolerância selecionados. As fotos fora desses períodos continuam auditáveis no relatório e na prévia ao desligar o filtro. A tela informa quantas foram ignoradas por falta de data. Cache e exportação mantêm esses avisos. Nenhuma data do disco é usada para preencher EXIF ausente; arquivos originais não são alterados.
+
+## Instalação em outro Mac
+
+Consulte [Instalar no Mac](docs/instalar-mac.md). A pasta inclui
+`Instalar no Mac.command` e `Abrir FujiTimeline.command`, sem caminhos pessoais.
