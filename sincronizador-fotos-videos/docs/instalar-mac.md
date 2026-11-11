@@ -32,10 +32,13 @@ Abra o FCPXML no Final Cut e confira visualmente o primeiro e o último disparo.
 
 ## Atualização de 11/11/2026
 
-Exportador corrigido para formatos verticais/customizados e FPS racional da
-fonte separado do FPS do projeto. Validação: 82 testes no Mac e DTD 1.8 com o
-caso real vertical a 29,97 fps. A importação dessa última correção no Final Cut
-continua pendente: o editor não respondeu durante a tentativa de verificação.
+Exportador corrigido para formatos verticais sem nome de preset inventado,
+FPS racional da fonte separado do FPS do projeto e timecode SMPTE de fonte
+(inclusive drop-frame). Exporta FCPXML 1.14, com media-rep e videoSources.
+Requer Final Cut que aceite FCPXML 1.14; versões anteriores não foram testadas.
+Validação real: vídeo DJI Mimo vertical a 29,97 fps com origem 08:30:32;19,
+quatro JPEGs e disparos importaram sem avisos no Final Cut em 11/11/2026.
+Isso confirma estrutura e disponibilidade de mídia, não calibração visual.
 Os scripts de instalação foram verificados sintaticamente; a instalação completa
 em um segundo Mac ainda precisa ser testada.
 

@@ -77,3 +77,30 @@ def test_exiftool_call_is_read_only_and_paths_are_separate_arguments(tmp_path):
     command = runner.call_args.args[0]
     assert command[-1] == str(path.resolve())
     assert not any("=" in argument for argument in command)
+
+
+@pytest.mark.parametrize('tc,fps,expected', [
+    ('08:30:32;19', F(30000, 1001), F(918061 * 1001, 30000)),
+    ('01:00:00:00', F(25), F(3600)),
+    ('00:01:00;02', F(30000, 1001), F(1800 * 1001, 30000)),
+    ('00:10:00;00', F(30000, 1001), F(17982 * 1001, 30000)),
+])
+def test_embedded_source_timecode(tc, fps, expected):
+    from fujitimeline.metadata import source_timecode
+    assert source_timecode(tc, fps) == expected
+
+
+def test_invalid_drop_frame_is_rejected():
+    from fujitimeline.metadata import source_timecode
+    with pytest.raises(ValueError):
+        source_timecode('00:01:00;00', F(30000, 1001))
+
+
+def test_video_probe_uses_embedded_timecode_separately_from_capture_time():
+    data = {'format': {'duration': '17.951267', 'tags': {'creation_time': '2026-11-11T11:32:05Z'}},
+            'streams': [{'codec_type': 'video', 'width': 1080, 'height': 1920,
+                         'avg_frame_rate': '30000/1001', 'start_time': '0',
+                         'tags': {'timecode': '08:30:32;19'}}]}
+    result = video_from_probe(Path('test.mp4'), data)
+    assert result.source_start == F(918061 * 1001, 30000)
+    assert result.captured.raw == '2026-11-11T11:32:05Z'

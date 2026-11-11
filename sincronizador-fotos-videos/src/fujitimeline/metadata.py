@@ -1,6 +1,7 @@
 """Read-only subprocess adapters. Never use filesystem dates as capture dates."""
 
 import json
+import re
 import os
 import subprocess
 import time
@@ -84,6 +85,27 @@ def _duration(stream: dict, container: dict) -> Fraction:
     return value
 
 
+def source_timecode(value: str, fps: Fraction) -> Fraction:
+    """Convert embedded SMPTE timecode to FCP's absolute source timeline."""
+    match = re.fullmatch(r"(\d{2}):(\d{2}):(\d{2})([:;])(\d{2})", value)
+    if not match:
+        raise ValueError(f"Timecode de fonte inválido: {value}")
+    h, m, sec, frame = (int(match[i]) for i in (1, 2, 3, 5))
+    nominal = round(fps)
+    if h > 23 or m > 59 or sec > 59 or frame >= nominal:
+        raise ValueError(f"Timecode de fonte inválido: {value}")
+    frames = ((h * 60 + m) * 60 + sec) * nominal + frame
+    if match[4] == ";":
+        if fps not in (Fraction(30000, 1001), Fraction(60000, 1001)):
+            raise ValueError(f"Drop-frame incompatível com FPS {fps}")
+        drop = 2 if nominal == 30 else 4
+        if m % 10 and sec == 0 and frame < drop:
+            raise ValueError(f"Quadro inexistente em timecode drop-frame: {value}")
+        minutes = h * 60 + m
+        frames -= drop * (minutes - minutes // 10)
+    return Fraction(frames) / fps
+
+
 def video_from_probe(path: Path, data: dict, assume_timezone: str | None = None) -> Video:
     streams = data.get("streams", [])
     visual = next((s for s in streams if s.get("codec_type") == "video"
@@ -114,10 +136,15 @@ def video_from_probe(path: Path, data: dict, assume_timezone: str | None = None)
     if fps <= 0:
         raise ValueError(f"Taxa de quadros ausente/inválida em {path}.")
     audio = next((s for s in streams if s.get("codec_type") == "audio"), {})
+    timecode = visual.get("tags", {}).get("timecode") or container.get("tags", {}).get("timecode")
+    if not timecode:
+        timecode = next((x.get("tags", {}).get("timecode") for x in streams
+                         if x.get("codec_type") == "data" and x.get("tags", {}).get("timecode")), None)
+    source_start = source_timecode(timecode, fps) if timecode else Fraction(str(visual.get("start_time", "0")))
     return Video(path.resolve(), capture, _duration(visual, container),
                  int(visual["width"]), int(visual["height"]), fps,
                  int(audio.get("channels", 0)), int(audio.get("sample_rate", 48000)),
-                 Fraction(str(visual.get("start_time", "0"))))
+                 source_start)
 
 
 def photo_from_exif(path: Path, data: dict, assume_timezone: str | None = None) -> Photo:

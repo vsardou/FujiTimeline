@@ -1,4 +1,4 @@
-"""FCPXML 1.8 via the upstream OTIO adapter, with bounded compatibility fixes.
+"""FCPXML via the upstream OTIO adapter, upgraded to current media references.
 
 The adapter owns the document, resources, sequence, spine and lane serialization.
 See docs/exporter-decision.md before changing its pinned version or these hooks.
@@ -41,7 +41,8 @@ class FujiAdapter(FcpxOtio):
             if not still:
                 attributes["frameDuration"] = xml_time(1 / rate)
                 # Explicit preset used by the real Mac/FCP import checkpoint.
-                attributes["name"] = "FFVideoFormatCustom"
+                if not info:
+                    attributes["colorSpace"] = "1-1-1 (Rec. 709)"
                 if (width, height, rate) == (1920, 1080, Fraction(30)):
                     attributes["name"] = "FFVideoFormat1080p30"
             self.formats[key] = ET.SubElement(self.resource_element, "format", attributes)
@@ -110,6 +111,7 @@ class FujiAdapter(FcpxOtio):
 
     def _offset_based_on_parent(self, child, parent, default_format_id):
         value = seconds(child.get("offset")) - seconds(parent.get("offset")) + seconds(parent.get("start"))
+        value = round(value * self.fps) / self.fps
         # Upstream expects RationalTime here. A high integral rate avoids its
         # 'int(value)==0' shortcut wiping sub-frame positive offsets.
         return otio.opentime.RationalTime(float(value * 1_000_000_000), 1_000_000_000)
@@ -139,6 +141,12 @@ def render_fcpxml(plan: Timeline, fps: Fraction = Fraction(30),
         seq.set("tcStart", "0s")
         seq.set("audioLayout", "stereo")
         seq.set("audioRate", "48k")
+    root.set("version", "1.14")
+    for asset in root.findall("./resources/asset"):
+        source = asset.attrib.pop("src")
+        ET.SubElement(asset, "media-rep", {"kind": "original-media", "src": source})
+        if asset.get("hasVideo") == "1":
+            asset.set("videoSources", "1")
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n' + ET.tostring(root, encoding="unicode")
     return xml, notes
 

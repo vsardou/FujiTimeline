@@ -26,7 +26,7 @@ def test_export_resources_lanes_and_absolute_photo_times(fps):
     plan = demo_timeline(sound=Sound(Path("click.wav"), F("0.15")))
     xml, notes = render_fcpxml(plan, fps)
     root = ET.fromstring(xml)
-    assert root.tag == "fcpxml" and root.get("version") == "1.8"
+    assert root.tag == "fcpxml" and root.get("version") == "1.14"
     assert not root.findall("./asset-clip")
     spine = root.find("./project/sequence/spine")
     assert len(spine) == 1
@@ -41,8 +41,8 @@ def test_export_resources_lanes_and_absolute_photo_times(fps):
     assets = root.findall("./resources/asset")
     assert len(assets) == 6
     for asset in assets:
-        assert asset.get("src").startswith("file:///")
-    assert any(a.get("src").endswith("click.wav") and a.get("hasAudio") == "1" for a in assets)
+        assert asset.find("media-rep").get("src").startswith("file:///")
+    assert any(a.find("media-rep").get("src").endswith("click.wav") and a.get("hasAudio") == "1" for a in assets)
     assert any("cauda" in note for note in notes)
     assert plan.duration == F("24.398")  # Export does not mutate the exact plan.
 
@@ -53,10 +53,10 @@ def test_video_audio_and_quoted_unicode_paths_are_preserved(tmp_path):
     photo = replace(plan.photos[0].media, path=tmp_path / "foto d'água.jpg")
     xml, _ = render_fcpxml(build_timeline([video], [photo]))
     root = ET.fromstring(xml)
-    asset = next(a for a in root.findall("./resources/asset") if a.get("src") == video.path.as_uri())
+    asset = next(a for a in root.findall("./resources/asset") if a.find("media-rep").get("src") == video.path.as_uri())
     assert asset.get("hasAudio") == "1"
     assert asset.get("audioChannels") == "2"
-    assert any(a.get("src") == photo.path.as_uri() for a in root.findall("./resources/asset"))
+    assert any(a.find("media-rep").get("src") == photo.path.as_uri() for a in root.findall("./resources/asset"))
 
 
 def test_second_recording_uses_parent_relative_offset_and_source_start():
@@ -123,9 +123,10 @@ def test_portrait_source_rate_is_independent_of_project_rate():
     root = ET.fromstring(render_fcpxml(plan, F(30))[0])
     formats = {f.get('id'): f for f in root.findall('./resources/format')}
     project_format = formats[root.find('./project/sequence').get('format')]
-    asset = next(a for a in root.findall("./resources/asset") if a.get("src") == video.path.resolve().as_uri())
+    asset = next(a for a in root.findall("./resources/asset") if a.find("media-rep").get("src") == video.path.resolve().as_uri())
     source_format = formats[asset.get('format')]
-    assert project_format.get('name') == 'FFVideoFormatCustom'
+    assert project_format.get('name') is None
+    assert project_format.get('colorSpace') == '1-1-1 (Rec. 709)'
     assert project_format.get('frameDuration') == '1/30s'
     assert source_format.get('frameDuration') == '1001/30000s'
     assert source_format.get('id') != project_format.get('id')
@@ -136,3 +137,16 @@ def test_audio_only_resource_does_not_claim_video_format():
     root = ET.fromstring(render_fcpxml(demo_timeline(sound=Sound(Path('click.wav'), F('0.15'))))[0])
     sound = next(a for a in root.findall('./resources/asset') if a.get('hasVideo') == '0')
     assert sound.get('format') is None
+
+
+def test_drop_frame_source_origin_keeps_photo_anchors_on_project_frames():
+    demo = demo_timeline()
+    source = F(918061 * 1001, 30000)
+    video = replace(demo.videos[0].media, width=1080, height=1920, fps=F(30000, 1001), source_start=source)
+    plan = build_timeline([video], [demo.photos[0].media])
+    root = ET.fromstring(render_fcpxml(plan)[0])
+    parent = root.find('./project/sequence/spine/asset-clip')
+    photo = parent.find('clip')
+    assert seconds(parent.get('start')) == source
+    assert (seconds(photo.get('offset')) * 30).denominator == 1
+    assert abs(seconds(photo.get('offset')) - source - plan.photos[0].offset) <= F(1,30)

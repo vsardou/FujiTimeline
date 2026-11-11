@@ -85,3 +85,19 @@ de captura, correção de sincronização ou arquivo de mídia foi alterado.
 82 testes passaram. O caso real testevacca2 foi reexportado pelo gerador usando
 os tempos do JSON original e passou na DTD Apple 1.8. A importação real não foi
 confirmada: o acesso ao Final Cut terminou em timeout em duas tentativas.
+
+
+## Validação real complementar — 11/11/2026
+
+A tentativa anterior com FFVideoFormatCustom não corrigiu a importação.
+Uma referência exportada pelo próprio Final Cut mostrou formato vertical sem
+name, com dimensões/frameDuration/colorSpace explícitos. O segundo erro era
+origem de mídia: o vídeo DJI Mimo tem timecode embutido 08:30:32;19 (drop-frame),
+embora start_time do FFprobe seja zero. O leitor agora calcula essa origem
+SMPTE separadamente do horário de captura. Âncoras são alinhadas à grade do
+projeto após soma da origem. As posições podem variar até um quadro pela
+combinação de arredondamentos; os timestamps e o plano exato não são alterados.
+
+A saída do adaptador é normalizada para FCPXML 1.14 com media-rep e
+videoSources. O caso real importou sem avisos: vídeo, quatro fotos e quatro
+sons visíveis na timeline. Teste não comprova sincronização visual dos disparos.
