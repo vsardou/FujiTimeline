@@ -122,9 +122,12 @@ class FujiAdapter(FcpxOtio):
 
 
 def render_fcpxml(plan: Timeline, fps: Fraction = Fraction(30),
-                  width: int | None = None, height: int | None = None) -> tuple[str, list[str]]:
+                  width: int | None = None, height: int | None = None,
+                  target: str = "final-cut") -> tuple[str, list[str]]:
     if bool(width) != bool(height) or (width is not None and (width <= 0 or height <= 0)):
         raise ValueError("Informe largura e altura positivas juntas.")
+    if target not in {"final-cut", "resolve"}:
+        raise ValueError("Editor de destino inválido; use final-cut ou resolve.")
     timeline, notes = build_otio(plan, fps)
     first = plan.videos[0].media
     adapter = FujiAdapter(timeline, fps, width or first.width, height or first.height)
@@ -141,12 +144,20 @@ def render_fcpxml(plan: Timeline, fps: Fraction = Fraction(30),
         seq.set("tcStart", "0s")
         seq.set("audioLayout", "stereo")
         seq.set("audioRate", "48k")
-    root.set("version", "1.14")
+    root.set("version", "1.10" if target == "resolve" else "1.14")
     for asset in root.findall("./resources/asset"):
         source = asset.attrib.pop("src")
         ET.SubElement(asset, "media-rep", {"kind": "original-media", "src": source})
         if asset.get("hasVideo") == "1":
             asset.set("videoSources", "1")
+    if target == "resolve":
+        library = ET.Element("library")
+        event = ET.SubElement(library, "event", {"name": plan.name})
+        for project in list(root.findall("project")):
+            root.remove(project)
+            event.append(project)
+        root.append(library)
+        notes.append("DaVinci Resolve: FCPXML 1.10 experimental; confirme mídia, áudio e sincronismo após importar a timeline.")
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE fcpxml>\n' + ET.tostring(root, encoding="unicode")
     return xml, notes
 

@@ -276,3 +276,10 @@ Pode selecionar Downloads diretamente, sem incluir subpastas. A busca ignora JPE
 
 Consulte [Instalar no Mac](docs/instalar-mac.md). A pasta inclui
 `Instalar no Mac.command` e `Abrir FujiTimeline.command`, sem caminhos pessoais.
+
+## DaVinci Resolve
+
+Escolha **DaVinci Resolve (experimental)** no campo **Editor de destino** para gerar
+FCPXML 1.10. Consulte [limitações e teste de importação](docs/davinci-resolve.md).
+A exportação padrão para Final Cut continua 1.14. Detecção de cliques pelo áudio
+não faz parte desta versão. A compatibilidade Resolve ainda precisa de teste no editor.

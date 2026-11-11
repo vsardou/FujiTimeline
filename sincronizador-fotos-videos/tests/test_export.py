@@ -150,3 +150,17 @@ def test_drop_frame_source_origin_keeps_photo_anchors_on_project_frames():
     assert seconds(parent.get('start')) == source
     assert (seconds(photo.get('offset')) * 30).denominator == 1
     assert abs(seconds(photo.get('offset')) - source - plan.photos[0].offset) <= F(1,30)
+
+
+def test_resolve_profile_preserves_edits_and_source_timecode():
+    plan = demo_timeline(sound=Sound(Path('click.wav'), F('0.15')))
+    final = ET.fromstring(render_fcpxml(plan)[0])
+    xml, notes = render_fcpxml(plan, target='resolve')
+    resolve = ET.fromstring(xml)
+    assert resolve.get('version') == '1.10'
+    assert resolve.find('library/event/project/sequence') is not None
+    assert ET.tostring(final.find('.//sequence')) == ET.tostring(resolve.find('.//sequence'))
+    assert ET.tostring(final.find('resources')) == ET.tostring(resolve.find('resources'))
+    assert any('experimental' in x for x in notes)
+    with pytest.raises(ValueError, match='destino'):
+        render_fcpxml(plan, target='unknown')

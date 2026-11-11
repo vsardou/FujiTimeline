@@ -34,6 +34,8 @@ def parser() -> argparse.ArgumentParser:
         cmd.add_argument("--report", type=Path, help="Relatório JSON com tempos exatos e avisos.")
         cmd.add_argument("--width", type=int)
         cmd.add_argument("--height", type=int)
+        cmd.add_argument("--target", choices=["final-cut", "resolve"], default="final-cut",
+                         help="Editor de destino; Resolve usa FCPXML 1.10 experimental.")
         cmd.add_argument("--profile", help=f"Arquivo .profile.json ou preset {EXPERIMENTAL_PRESET}; omitido = zero.")
         cmd.add_argument("--pair-id", help="Identificador local do par Fujifilm/iPhone; obrigatório ao selecionar perfil.")
         if name != "demo":
@@ -127,7 +129,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.command == "plan":
                 write_new(output, to_json(plan), ".json")
             else:
-                plan.warnings.extend(export_fcpxml(plan, output, fps=args.fps, width=args.width, height=args.height))
+                plan.warnings.extend(export_fcpxml(plan, output, fps=args.fps, width=args.width, height=args.height, target=args.target))
             print(f"Criado: {output.resolve()}")
         if args.report:
             write_new(args.report, to_json(plan), ".json")

@@ -67,6 +67,7 @@ class Request:
     ffprobe: str = 'ffprobe'
     exiftool: str = 'exiftool'
     unchecked: frozenset[Path] = frozenset()
+    target: str = "final-cut"
 
 
 def execute(request: Request, export: bool = False):
@@ -83,7 +84,7 @@ def execute(request: Request, export: bool = False):
                           sound=reader.sound(inputs.sound) if inputs.sound else None)
     record_missing_dates(plan, reader.skipped_missing_capture_time)
     if export:
-        plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps))
+        plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps, target=request.target))
         write_new(report, to_json(plan), '.json')
     return plan
 
@@ -149,7 +150,7 @@ class Session:
         if export:
             progress(total, total, 'Gravando XML e relatório…')
             # Once writing starts, finish both small outputs; cancellation never truncates them.
-            plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps))
+            plan.warnings.extend(export_fcpxml(plan, request.output, fps=request.fps, target=request.target))
             write_new(report, to_json(plan), '.json')
         return Review(plan, candidates)
 

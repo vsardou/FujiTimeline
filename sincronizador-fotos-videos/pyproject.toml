@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fujitimeline"
-version = "0.1.0"
+version = "0.1.1"
 description = "Metadata-only photo/video synchronization and editable FCPXML export"
 readme = "README.md"
 requires-python = ">=3.11"

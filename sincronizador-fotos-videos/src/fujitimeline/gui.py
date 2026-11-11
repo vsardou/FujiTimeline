@@ -121,6 +121,11 @@ class App:
         self.path_row(advanced, 'ffprobe', 'FFprobe', find_tool('ffprobe'), 'tool')
         self.path_row(advanced, 'exiftool', 'ExifTool', find_tool('exiftool'), 'tool')
 
+        target_row = ttk.Frame(body)
+        target_row.pack(fill="x")
+        self.field(target_row, "target", "Editor de destino", "Final Cut Pro", 32,
+                   ["Final Cut Pro", "DaVinci Resolve (experimental)"])
+
         destination = ttk.Frame(body)
         destination.pack(fill='x')
         default = Path(self.preferences.get('output_dir', str(Path.cwd() / 'output'))) / ('FujiTimeline-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '.fcpxml')
@@ -317,7 +322,8 @@ class App:
                 mode='fixed' if v['mode'] == 'Fixa' else 'until_next', fixed=seconds(v['fixed']) if v['mode'] == 'Fixa' else Fraction(3),
                 tolerance=seconds(v['tolerance']), fps=Fraction(v['fps']), recursive=self.recursive.get(),
                 sound=Path(v['sound']).expanduser() if v['sound'] else None, timezone=v['timezone'] or None,
-                ffprobe=v['ffprobe'], exiftool=v['exiftool'], unchecked=frozenset(self.unchecked))
+                ffprobe=v['ffprobe'], exiftool=v['exiftool'], unchecked=frozenset(self.unchecked),
+                target="resolve" if v["target"].startswith("DaVinci") else "final-cut")
         except Exception as exc:
             self.status.configure(text=str(exc))
             if not automatic:
